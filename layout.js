@@ -219,7 +219,7 @@ function undock(win, options = {}) {
 // Dock a window into a display overlay area -> maps to the real dock-area
 function dockToArea(win, displayArea) {
     // If window is already docked to the exact area, do nothing
-    const areaType = ['bottom','left','right','center'].find(c => displayArea.classList.contains(c));
+    const areaType = ['top','bottom','left','right','center'].find(c => displayArea.classList.contains(c));
     if (!areaType) return;
 
     // Actually target the persistent dock-area element
@@ -256,7 +256,7 @@ function updateLayout() {
     const H = Math.max(200, containerRect.height);
 
     const counts = {};
-    ['left','right','bottom','center'].forEach(k => {
+    ['left','right','top','bottom','center'].forEach(k => {
         const area = dockAreas.find(a => a.classList.contains(k));
         if (!area) { counts[k] = 0; return; }
         const tabs = getTabs(area);
@@ -272,13 +272,16 @@ function updateLayout() {
 
     const leftW   = counts.left   ? Math.min(W * 0.4, baseW + (counts.left   - 1) * growW) : 0;
     const rightW  = counts.right  ? Math.min(W * 0.4, baseW + (counts.right  - 1) * growW) : 0;
+    const topH    = counts.top    ? Math.min(H * 0.35, baseH + (counts.top   - 1) * growH) : 0;
     const bottomH = counts.bottom ? Math.min(H * 0.35, baseH + (counts.bottom- 1) * growH) : 0;
 
-    // Set CSS variables for grid
+    // Set CSS variables used by the grid layout
     container.style.setProperty('--dock-left-width',   leftW   + 'px');
     container.style.setProperty('--dock-right-width',  rightW  + 'px');
+    container.style.setProperty('--dock-top-height',   topH    + 'px');
     container.style.setProperty('--dock-bottom-height',bottomH + 'px');
 }
+
 
 
 
