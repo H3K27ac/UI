@@ -370,7 +370,11 @@ function endResize() {
 }
 
 splitters.forEach(s => {
-    s.el.addEventListener("pointerdown", e => beginResize(s, e));
+    s.el.addEventListener("pointerdown", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        beginResize(s, e);
+    });
 });
 
 
