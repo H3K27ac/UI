@@ -40,6 +40,7 @@ html, body {
     transition: top .2s ease, left .2s ease, width .2s ease, height .2s ease;
     display: flex;
     flex-direction: column; 
+    z-index: 1;
 }
 
 .dockable-window header {
