@@ -280,7 +280,100 @@ function updateLayout() {
     container.style.setProperty('--dock-right-width',  rightW  + 'px');
     container.style.setProperty('--dock-top-height',   topH    + 'px');
     container.style.setProperty('--dock-bottom-height',bottomH + 'px');
+
+    showSplitters();
 }
+
+// --- Resizing Logic ---
+
+// Splitter directions configuration
+const splitters = [
+    {
+        dir: "left",
+        cssVar: "--dock-left-width",
+        min: 80,
+        axis: "x",
+        sign: +1,
+    },
+    {
+        dir: "right",
+        cssVar: "--dock-right-width",
+        min: 80,
+        axis: "x",
+        sign: -1,
+    },
+    {
+        dir: "top",
+        cssVar: "--dock-top-height",
+        min: 60,
+        axis: "y",
+        sign: +1,
+    },
+    {
+        dir: "bottom",
+        cssVar: "--dock-bottom-height",
+        min: 60,
+        axis: "y",
+        sign: -1,
+    }
+];
+
+let activeSplitter = null;
+let splitterStartPos = 0;
+let splitterStartSize = 0;
+
+// Get splitters from DOM
+splitters.forEach(s => {
+    s.el = document.querySelector(`.splitter.${s.dir}`);
+});
+
+function showSplitters() {
+    splitters.forEach(s => {
+        const area = document.querySelector(`.dock-area.${s.dir}`);
+        const tabs = dockTabsCache.get(area);
+
+        const visible = tabs && tabs.countTabs() > 0;
+        s.el.style.display = visible ? "block" : "none";
+    });
+}
+
+
+function beginResize(s, e) {
+    activeSplitter = s;
+
+    splitterStartPos = s.axis === "x" ? e.clientX : e.clientY;
+
+    const cs = getComputedStyle(container);
+    splitterStartSize = parseFloat(cs.getPropertyValue(s.cssVar));
+
+    document.addEventListener("pointermove", doResize);
+    document.addEventListener("pointerup", endResize);
+}
+
+
+function doResize(e) {
+    if (!activeSplitter) return;
+
+    const curr = activeSplitter.axis === "x" ? e.clientX : e.clientY;
+    const delta = (curr - splitterStartPos) * activeSplitter.sign;
+
+    const newSize = Math.max(activeSplitter.min, splitterStartSize + delta);
+
+    container.style.setProperty(activeSplitter.cssVar, newSize + "px");
+}
+
+
+function endResize() {
+    activeSplitter = null;
+    document.removeEventListener("pointermove", doResize);
+    document.removeEventListener("pointerup", endResize);
+}
+
+splitters.forEach(s => {
+    s.el.addEventListener("pointerdown", e => beginResize(s, e));
+});
+
+
 
 
 

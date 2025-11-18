@@ -175,6 +175,46 @@ html, body {
 }
 
 
+/* =======================================
+    Splitters
+======================================= */
+
+.splitter {
+    position: absolute;
+    background: rgba(255,255,255,0.15);
+    z-index: 9999;
+}
+
+.splitter:hover {
+    background: rgba(255,255,255,0.35);
+}
+
+/* Left/Right = vertical splitter */
+.splitter.left,
+.splitter.right {
+    width: 6px;
+    cursor: ew-resize;
+    top: 0;
+    bottom: 0;
+}
+
+/* Top/Bottom = horizontal splitter */
+.splitter.top,
+.splitter.bottom {
+    height: 6px;
+    cursor: ns-resize;
+    left: 0;
+    right: 0;
+}
+
+/* Position anchors */
+.splitter.left   { left:  var(--dock-left-width, 0px); }
+.splitter.right  { right: var(--dock-right-width, 0px); }
+.splitter.top    { top:   var(--dock-top-height, 0px); }
+.splitter.bottom { bottom:var(--dock-bottom-height, 0px); }
+
+
+
 /*
 @media (max-width: 768px) {
     .dockable-window {
