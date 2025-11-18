@@ -1,4 +1,3 @@
-
 //  .container                 - the main container
 //  .dockable-window           - each floating window; must contain a <header> and .window-content
 //  .display-dock-area         - overlay drop targets shown while dragging (have classes top/left/right/bottom/center)
