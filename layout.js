@@ -1,508 +1,340 @@
-//  .container                 - the main container
-//  .dockable-window           - each floating window; must contain a <header> and .window-content
-//  .display-dock-area         - overlay drop targets shown while dragging (have classes top/left/right/bottom/center)
-//  .dock-area                 - actual persistent areas in the layout (have classes top/left/right/bottom/center)
-// Note: center is treated as the primary pane (keeps full center space).
 
-const container = document.querySelector('.container');
-const windows = Array.from(document.querySelectorAll('.dockable-window'));
-const displayDockAreas = Array.from(document.querySelectorAll('.display-dock-area'));
-const dockAreas = Array.from(document.querySelectorAll('.dock-area'));
 
-let draggedWindow = null;
+const container = document.querySelector(".container");
+const windows     = [...document.querySelectorAll(".dockable-window")];
+const dockAreas   = [...document.querySelectorAll(".dock-area")];
+const overlayAreas= [...document.querySelectorAll(".display-dock-area")];
+
+const areaByType = Object.fromEntries(
+    ["left","right","top","bottom","center"]
+        .map(t => [t, dockAreas.find(a => a.classList.contains(t))])
+);
+
+let dragged = null;
 let dragOffsetX = 0, dragOffsetY = 0;
 let snapTarget = null;
 let zIndexCounter = 1000;
 
-const savedLayout = {
-    left:   null,
-    right:  null,
-    top:    null,
-    bottom: null
-};
+const savedSizes = { left:null, right:null, top:null, bottom:null };
 
+// Maps
+const dockMap        = new Map();     // window -> dock-area
+const originalSize   = new WeakMap(); // window -> initial dimensions
+const tabsCache      = new WeakMap(); // dock-area -> DockTabs instance
 
-// Maps and caches
-const dockMap = new Map();          // floating window element -> dock-area element where it's docked
-const originalSize = new Map();     // floating window -> {w,h}
-const dockTabsCache = new WeakMap(); // dock-area element -> DockTabs instance
-
-// --- DockTabs: manages tab bar + panels inside a dock area ---
+/***********************************************************************
+ * DockTabs - manages tab bar and content panels inside a dock area
+ ***********************************************************************/
 class DockTabs {
-    constructor(areaEl) {
-        this.area = areaEl;
-        this.tabBar = areaEl.querySelector('.dock-tabs') || this._createTabBar();
-        this.contentBox = areaEl.querySelector('.dock-content') || this._createContentBox();
-        // ensure content box fills area
-        this.area.classList.add('has-tabs');
+    constructor(area) {
+        this.area = area;
+        this.tabBar = area.querySelector(".dock-tabs") || this._make("dock-tabs", true);
+        this.contentBox = area.querySelector(".dock-content") || this._make("dock-content");
+        this.area.classList.add("has-tabs");
     }
 
-    _createTabBar() {
-        const bar = document.createElement('div');
-        bar.className = 'dock-tabs';
-        this.area.prepend(bar); // tabs at top of area
-        return bar;
+    _make(cls, prepend=false) {
+        const el = document.createElement("div");
+        el.className = cls;
+        prepend ? this.area.prepend(el) : this.area.appendChild(el);
+        return el;
     }
 
-    _createContentBox() {
-        const content = document.createElement('div');
-        content.className = 'dock-content';
-        this.area.appendChild(content);
-        return content;
+    _tabExists(id) {
+        return !!this.tabBar.querySelector(`[data-win="${id}"]`);
     }
 
-    // Add a window into tabs (the actual window's content is moved)
-    addTab(win) {
+    add(win) {
         const id = win.dataset.id;
-        if (!id) throw new Error('window must have dataset.id');
-
-        // If a tab exists already (re-docking), don't duplicate
-        if (this.tabBar.querySelector(`[data-win="${id}"]`)) {
-            this.activate(id);
-            return;
+        if (this._tabExists(id)) {
+            return this.activate(id);
         }
 
-        // Create tab button
-        const tab = document.createElement('button');
-        tab.className = 'dock-tab';
+        // Tab
+        const tab = document.createElement("button");
+        tab.className = "dock-tab";
         tab.dataset.win = id;
-        tab.type = 'button';
-        tab.textContent = (win.querySelector('header')?.innerText || `Win ${id}`);
+        tab.type = "button";
+        tab.textContent = win.querySelector("header")?.innerText || `Window ${id}`;
         this.tabBar.appendChild(tab);
 
-        // Move the content into a panel element (not the entire window DOM - keep the floating window DOM but transfer its content)
-        const panel = document.createElement('div');
-        panel.className = 'dock-panel';
+        // Panel
+        const panel = document.createElement("div");
+        panel.className = "dock-panel";
         panel.dataset.win = id;
 
-        const contentNode = win.querySelector('.window-content');
-        if (contentNode) {
-            panel.appendChild(contentNode);
-        } else {
-            // fallback: clone content
-            panel.appendChild(win.cloneNode(true));
-        }
+        const content = win.querySelector(".window-content");
+        panel.appendChild(content);
         this.contentBox.appendChild(panel);
 
-        // Tab click selects
-        tab.addEventListener('click', () => this.activate(id));
-
-        // Allow dragging the active tab to undock (start dragging the original window)
-        tab.addEventListener('pointerdown', e => {
-            // Only start undock if it's currently active (so user drags the active tab)
-            if (!tab.classList.contains('active')) return;
-            // Create a short delay so pointer event flows to global drag logic
-            // We'll synthesize pointerdown on the original floating window to reuse undock logic
-            // If the original floating DOM element is hidden, undock() will reveal it back.
-            const originalWin = document.querySelector(`.dockable-window[data-id="${id}"], .dockable-window[data-id='${id}']`) || windows.find(w => w.dataset.id === id);
-            if (!originalWin) return;
-            // Undock and initiate drag from current pointer event
-            // We call undockImmediate so undock won't run layout adjustments twice.
-            undock(originalWin, {revealOnly: true});
-            onDown(originalWin, e);
+        // events
+        tab.addEventListener("click", () => this.activate(id));
+        tab.addEventListener("pointerdown", e => {
+            if (!tab.classList.contains("active")) return;
+            undock(win, { revealOnly: true });
+            beginDrag(win, e);
         });
 
-        // Activate the new tab
         this.activate(id);
     }
 
-    removeTab(win) {
+    remove(win) {
         const id = win.dataset.id;
-        const tab = this.tabBar.querySelector(`[data-win="${id}"]`);
-        const panel = this.contentBox.querySelector(`[data-win="${id}"]`);
-        if (tab) tab.remove();
-        if (panel) panel.remove();
-        // activate first remaining tab if any
-        const first = this.tabBar.querySelector('.dock-tab');
-        if (first) this.activate(first.dataset.win);
-        else this.clearActive();
+        this.tabBar.querySelector(`[data-win="${id}"]`)?.remove();
+        this.contentBox.querySelector(`[data-win="${id}"]`)?.remove();
+
+        const first = this.tabBar.querySelector(".dock-tab");
+        first ? this.activate(first.dataset.win) : this.clear();
     }
 
-    activate(winId) {
-        this.tabBar.querySelectorAll('.dock-tab').forEach(t => t.classList.toggle('active', t.dataset.win === winId));
-        this.contentBox.querySelectorAll('.dock-panel').forEach(p => p.classList.toggle('active', p.dataset.win === winId));
+    activate(id) {
+        [...this.tabBar.children].forEach(t => t.classList.toggle("active", t.dataset.win === id));
+        [...this.contentBox.children].forEach(p => p.classList.toggle("active", p.dataset.win === id));
     }
 
-    clearActive() {
-        this.tabBar.querySelectorAll('.dock-tab').forEach(t => t.classList.remove('active'));
-        this.contentBox.querySelectorAll('.dock-panel').forEach(p => p.classList.remove('active'));
+    clear() {
+        [...this.tabBar.children].forEach(t => t.classList.remove("active"));
+        [...this.contentBox.children].forEach(p => p.classList.remove("active"));
     }
 
-    countTabs() {
-        return this.tabBar.querySelectorAll('.dock-tab').length;
+    count() {
+        return this.tabBar.children.length;
     }
 }
 
-// Get or create DockTabs for area
-function getTabs(area) {
-    if (!dockTabsCache.has(area)) {
-        dockTabsCache.set(area, new DockTabs(area));
-    }
-    return dockTabsCache.get(area);
+function tabs(area) {
+    return tabsCache.get(area) || tabsCache.set(area, new DockTabs(area)).get(area);
 }
 
-// Show/hide overlay drop targets while dragging
-function showDockAreas() {
-    displayDockAreas.forEach(a => {
-        a.style.display = 'block';
-        a.classList.remove('hovered');
-    });
-}
-function hideDockAreas() {
-    displayDockAreas.forEach(a => {
-        a.style.display = 'none';
-        a.classList.remove('hovered');
-    });
-}
+/***********************************************************************
+ * Overlay highlight logic
+ ***********************************************************************/
+const showOverlays = (yes=true) =>
+    overlayAreas.forEach(a => a.style.display = yes ? "block":"none");
 
-// nearest overlay by center-distance
-function getNearestDockArea() {
-    if (!draggedWindow) return null;
-    const winRect = draggedWindow.getBoundingClientRect();
-    let nearest = null;
-    let best = Infinity;
+function nearestOverlay(win) {
+    const rect = win.getBoundingClientRect();
+    const cx = rect.left + rect.width/2;
+    const cy = rect.top  + rect.height/2;
 
-    displayDockAreas.forEach(area => {
+    let best = null, bestDist = 99999;
+    for (const area of overlayAreas) {
         const r = area.getBoundingClientRect();
-        const dx = (winRect.left + winRect.width / 2) - (r.left + r.width / 2);
-        const dy = (winRect.top + winRect.height / 2) - (r.top + r.height / 2);
-        const d = Math.hypot(dx, dy);
-        if (d < best && d < 180) {
-            best = d;
-            nearest = area;
+        const dx = cx - (r.left + r.width/2);
+        const dy = cy - (r.top  + r.height/2);
+        const dist = Math.hypot(dx,dy);
+
+        if (dist < bestDist && dist < 180) {
+            bestDist = dist;
+            best = area;
         }
-    });
-    return nearest;
+    }
+    return best;
 }
 
-// Undock: remove from dock area and restore floating window display
-// options: { revealOnly: boolean } - reveal the original window but don't remove .window-content from area
-function undock(win, options = {}) {
+/***********************************************************************
+ * Dock / Undock
+ ***********************************************************************/
+function undock(win, {revealOnly=false}={}) {
     const area = dockMap.get(win);
-    if (!area) {
-        // already floating
-        return;
-    }
-    const tabs = dockTabsCache.get(area);
-    if (tabs) {
-        // Move the content panel back into the floating window
-        const panel = tabs.contentBox.querySelector(`[data-win="${win.dataset.id}"]`);
-        if (panel) {
-            const contentNode = panel.querySelector('.window-content');
-            if (contentNode) {
-                // move contentNode back into window (prepend so header stays at top)
-                win.appendChild(contentNode);
-            } else {
-                // if no .window-content in panel (shouldn't happen), do nothing
-            }
-            // remove panel and tab
-            tabs.removeTab(win);
-        }
-    }
+    if (!area) return;
 
-    // hide dock area if empty
-    if (tabs && tabs.countTabs() === 0) {
-        area.style.display = 'none';
-    }
+    const t = tabs(area);
+    const panel = t.contentBox.querySelector(`[data-win="${win.dataset.id}"]`);
 
+    const content = panel.querySelector(".window-content");
+    if (content) win.appendChild(content);
+
+    t.remove(win);
     dockMap.delete(win);
 
-    // Restore floating window appearance
-    const size = originalSize.get(win);
-    if (size) {
-        win.style.width = size.w + 'px';
-        win.style.height = size.h + 'px';
-    }
-    win.style.display = 'block';
-    // Ensure it's above others
-    win.style.zIndex = ++zIndexCounter;
+    if (t.count() === 0) area.style.display = "none";
 
-    // If we used revealOnly flag, caller intends to then start dragging
-    if (options.revealOnly) {
-        // leave content already moved back
-        return;
+    if (!revealOnly) {
+        const s = originalSize.get(win);
+        win.style.width  = s.w + "px";
+        win.style.height = s.h + "px";
     }
+
+    win.style.display = "block";
+    win.style.zIndex = ++zIndexCounter;
 }
 
-// Dock a window into a display overlay area -> maps to the real dock-area
-function dockToArea(win, displayArea) {
-    // If window is already docked to the exact area, do nothing
-    const areaType = ['top','bottom','left','right','center'].find(c => displayArea.classList.contains(c));
-    if (!areaType) return;
+function dock(win, overlay) {
+    const type = Object.keys(areaByType).find(t => overlay.classList.contains(t));
+    if (!type) return;
 
-    // Actually target the persistent dock-area element
-    const area = dockAreas.find(a => a.classList.contains(areaType));
-    if (!area) {
-        console.warn('No persistent dock-area for', areaType);
-        return;
-    }
+    const area = areaByType[type];
+    undock(win, {revealOnly:true});
 
-    // Normal docking:
-    // 1) If currently docked elsewhere, undock (we handle moving content inside undock())
-    undock(win, { revealOnly: true });
-
-    // 2) Hide floating window DOM (we keep the DOM element, but it's hidden while its content lives in the area)
-    win.style.display = 'none';
-
-    // 3) Add to dockMap and move window content into the area's tabs (DockTabs handles moving .window-content)
+    win.style.display = "none";
     dockMap.set(win, area);
-    const tabs = getTabs(area);
-    tabs.addTab(win);
+    tabs(area).add(win);
+    area.style.display = "block";
 
-    // show the area if it was hidden
-    area.style.display = 'block';
-
-    // update layout so splits/shares reflect the change
     updateLayout();
 }
 
-// Layout: adjust sizes of edge areas based on how many tabs they contain.
-// Center fills remainder.
+/***********************************************************************
+ * Layout
+ ***********************************************************************/
 function updateLayout() {
-    const containerRect = container.getBoundingClientRect();
-    const W = Math.max(200, containerRect.width);
-    const H = Math.max(200, containerRect.height);
-
     const counts = {};
-    ['left','right','top','bottom','center'].forEach(k => {
-        const area = dockAreas.find(a => a.classList.contains(k));
-        if (!area) { counts[k] = 0; return; }
-        const tabs = getTabs(area);
-        counts[k] = tabs.countTabs();
-        area.style.display = counts[k] > 0 ? 'block' : (k === 'center' ? 'block' : 'none');
-    });
+    for (const type in areaByType) {
+        const area = areaByType[type];
+        const count = tabs(area).count();
+        counts[type] = count;
+        area.style.display = (count || type==="center") ? "block" : "none";
+    }
 
-    // Base sizes
-    const baseW = 220;
-    const baseH = 140;
-    const growW = 40;
-    const growH = 30;
+    const W = container.clientWidth;
+    const H = container.clientHeight;
 
-    const leftW   = counts.left
-    ? (savedLayout.left ?? Math.min(W * 0.4, baseW + (counts.left - 1) * growW))
-    : 0;
+    const baseW=220, growW=40, baseH=140, growH=30;
 
-   const rightW  = counts.right
-    ? (savedLayout.right ?? Math.min(W * 0.4, baseW + (counts.right - 1) * growW))
-    : 0;
+    const left   = counts.left   ? savedSizes.left   ?? Math.min(W*0.4, baseW+(counts.left-1)*growW) : 0;
+    const right  = counts.right  ? savedSizes.right  ?? Math.min(W*0.4, baseW+(counts.right-1)*growW) : 0;
+    const top    = counts.top    ? savedSizes.top    ?? Math.min(H*0.35,baseH+(counts.top -1)*growH) : 0;
+    const bottom = counts.bottom ? savedSizes.bottom ?? Math.min(H*0.35,baseH+(counts.bottom-1)*growH) : 0;
 
-    const topH    = counts.top
-    ? (savedLayout.top ?? Math.min(H * 0.35, baseH + (counts.top - 1) * growH))
-    : 0;
+    container.style.setProperty("--dock-left-width",   left+"px");
+    container.style.setProperty("--dock-right-width",  right+"px");
+    container.style.setProperty("--dock-top-height",   top+"px");
+    container.style.setProperty("--dock-bottom-height",bottom+"px");
 
-    const bottomH = counts.bottom
-    ? (savedLayout.bottom ?? Math.min(H * 0.35, baseH + (counts.bottom - 1) * growH))
-    : 0;
-
-
-    // Set CSS variables used by the grid layout
-    container.style.setProperty('--dock-left-width',   leftW   + 'px');
-    container.style.setProperty('--dock-right-width',  rightW  + 'px');
-    container.style.setProperty('--dock-top-height',   topH    + 'px');
-    container.style.setProperty('--dock-bottom-height',bottomH + 'px');
-
-    showSplitters();
+    updateSplitters();
 }
 
-// --- Resizing Logic ---
-
-// Splitter directions configuration
-const splitters = [
-    {
-        dir: "left",
-        cssVar: "--dock-left-width",
-        min: 80,
-        axis: "x",
-        sign: +1,
-    },
-    {
-        dir: "right",
-        cssVar: "--dock-right-width",
-        min: 80,
-        axis: "x",
-        sign: -1,
-    },
-    {
-        dir: "top",
-        cssVar: "--dock-top-height",
-        min: 60,
-        axis: "y",
-        sign: +1,
-    },
-    {
-        dir: "bottom",
-        cssVar: "--dock-bottom-height",
-        min: 60,
-        axis: "y",
-        sign: -1,
-    }
+/***********************************************************************
+ * Splitters (generalized)
+ ***********************************************************************/
+const splitterConfigs = [
+    {dir:"left",   css:"--dock-left-width",   axis:"x", min:80, sign:+1},
+    {dir:"right",  css:"--dock-right-width",  axis:"x", min:80, sign:-1},
+    {dir:"top",    css:"--dock-top-height",   axis:"y", min:60, sign:+1},
+    {dir:"bottom", css:"--dock-bottom-height",axis:"y", min:60, sign:-1}
 ];
 
-let activeSplitter = null;
-let splitterStartPos = 0;
-let splitterStartSize = 0;
+let activeSplit = null;
+let startPos = 0;
+let startSize = 0;
 
-// Get splitters from DOM
-splitters.forEach(s => {
-    s.el = document.querySelector(`.splitter.${s.dir}`);
+splitterConfigs.forEach(cfg => {
+    cfg.el = document.querySelector(`.splitter.${cfg.dir}`);
+    cfg.el.addEventListener("pointerdown", e => {
+        e.preventDefault();
+        beginResize(cfg, e);
+    });
 });
 
-function showSplitters() {
-    splitters.forEach(s => {
-        const area = document.querySelector(`.dock-area.${s.dir}`);
-        const tabs = dockTabsCache.get(area);
-
-        const visible = tabs && tabs.countTabs() > 0;
-        s.el.style.display = visible ? "block" : "none";
-    });
+function updateSplitters() {
+    for (const cfg of splitterConfigs) {
+        const area = areaByType[cfg.dir];
+        cfg.el.style.display = tabs(area).count() ? "block" : "none";
+    }
 }
 
-
-function beginResize(s, e) {
-    activeSplitter = s;
-
-    splitterStartPos = s.axis === "x" ? e.clientX : e.clientY;
-
-    const cs = getComputedStyle(container);
-    splitterStartSize = parseFloat(cs.getPropertyValue(s.cssVar));
+function beginResize(cfg, e) {
+    activeSplit = cfg;
+    startPos = (cfg.axis==="x"? e.clientX : e.clientY);
+    startSize = parseFloat(getComputedStyle(container).getPropertyValue(cfg.css));
 
     document.addEventListener("pointermove", doResize);
     document.addEventListener("pointerup", endResize);
 }
 
-
 function doResize(e) {
-    if (!activeSplitter) return;
+    if (!activeSplit) return;
 
-    const curr = activeSplitter.axis === "x" ? e.clientX : e.clientY;
-    const delta = (curr - splitterStartPos) * activeSplitter.sign;
+    const pos = activeSplit.axis==="x" ? e.clientX : e.clientY;
+    const delta = (pos - startPos) * activeSplit.sign;
+    const newSize = Math.max(activeSplit.min, startSize + delta);
 
-    const newSize = Math.max(activeSplitter.min, splitterStartSize + delta);
-
-    container.style.setProperty(activeSplitter.cssVar, newSize + "px");
+    container.style.setProperty(activeSplit.css, newSize+"px");
 }
 
-
 function endResize() {
-    if (activeSplitter) {
-        const s = activeSplitter;
-        const cs = getComputedStyle(container);
-        const size = parseFloat(cs.getPropertyValue(s.cssVar));
-
-        savedLayout[s.dir] = size;   // Save the resized value
+    const cfg = activeSplit;
+    if (cfg) {
+        const v = parseFloat(getComputedStyle(container).getPropertyValue(cfg.css));
+        savedSizes[cfg.dir] = v;
     }
-    activeSplitter = null;
+    activeSplit = null;
 
     document.removeEventListener("pointermove", doResize);
     document.removeEventListener("pointerup", endResize);
 }
 
-splitters.forEach(s => {
-    s.el.addEventListener("pointerdown", e => {
-        e.preventDefault();
-        e.stopPropagation();
-        beginResize(s, e);
-    });
-});
+/***********************************************************************
+ * Dragging
+ ***********************************************************************/
+windows.forEach((win,i) => {
+    win.dataset.id ||= String(i);
 
-
-
-
-
-
-// Dragging logic
-
-// initialize windows
-windows.forEach((win, idx) => {
-    // ensure each window has an ID
-    if (!win.dataset.id) win.dataset.id = String(idx);
-    // store its original size
     const r = win.getBoundingClientRect();
-    originalSize.set(win, { w: r.width, h: r.height });
-    // header pointerdown
-    const header = win.querySelector('header');
-    if (header) {
-        header.style.touchAction = 'none';
-        header.addEventListener('pointerdown', e => onDown(win, e));
-    }
-    // ensure floating windows are positioned absolute
-    win.style.position = win.style.position || 'absolute';
+    originalSize.set(win,{w:r.width,h:r.height});
+
+    const header = win.querySelector("header");
+    header.style.touchAction = "none";
+    header.addEventListener("pointerdown", e => beginDrag(win,e));
+
+    win.style.position ||= "absolute";
 });
 
-// pointerdown to start dragging floating window
-function onDown(win, e) {
+function beginDrag(win,e) {
     e.preventDefault();
-    draggedWindow = win;
+    dragged = win;
 
-    // If the window is docked, undock it and restore floating window (but we want to start dragging it)
-    if (dockMap.has(win)) {
-        undock(win, { revealOnly: true });
-    }
+    if (dockMap.has(win)) undock(win,{revealOnly:true});
 
     const r = win.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-    // capture offsets relative to container
+    const c = container.getBoundingClientRect();
     dragOffsetX = e.clientX - r.left;
     dragOffsetY = e.clientY - r.top;
 
-    // place window above others
     win.style.zIndex = ++zIndexCounter;
+    win.style.display = "block";
+    win.style.left = (r.left - c.left) + "px";
+    win.style.top  = (r.top  - c.top ) + "px";
 
-    // Make sure it's visible (it might have been hidden after undock reveal)
-    win.style.display = 'block';
-    // Make position absolute relative to container: compute left/top relative to container
-    win.style.left = (r.left - containerRect.left) + 'px';
-    win.style.top = (r.top - containerRect.top) + 'px';
+    showOverlays(true);
 
-    showDockAreas();
+    document.addEventListener("pointermove", onDrag);
+    document.addEventListener("pointerup", endDrag);
 
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-
-    // set pointer capture on the target so we receive pointer events even if leaving the element
-    if (e.target.setPointerCapture) {
-        try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
-    }
+    e.target.setPointerCapture?.(e.pointerId);
 }
 
-function onMove(e) {
-    if (!draggedWindow) return;
-    const containerRect = container.getBoundingClientRect();
-    const x = e.clientX - containerRect.left - dragOffsetX;
-    const y = e.clientY - containerRect.top - dragOffsetY;
-    draggedWindow.style.left = Math.max(0, x) + 'px';
-    draggedWindow.style.top = Math.max(0, y) + 'px';
+function onDrag(e) {
+    if (!dragged) return;
+    const c = container.getBoundingClientRect();
 
-    // find nearest display area and highlight
-    displayDockAreas.forEach(a => a.classList.remove('hovered'));
-    const near = getNearestDockArea();
-    if (near) {
-        snapTarget = near;
-        near.classList.add('hovered');
-    } else {
-        snapTarget = null;
-    }
+    dragged.style.left = Math.max(0, e.clientX - c.left - dragOffsetX) + "px";
+    dragged.style.top  = Math.max(0, e.clientY - c.top  - dragOffsetY) + "px";
+
+    overlayAreas.forEach(a => a.classList.remove("hovered"));
+    snapTarget = nearestOverlay(dragged);
+    snapTarget?.classList.add("hovered");
 }
 
-function onUp(e) {
-    if (!draggedWindow) return;
+function endDrag() {
+    if (!dragged) return;
 
-    if (snapTarget) {
-        dockToArea(draggedWindow, snapTarget);
-    } else {
-        // dropped outside - keep floating where released
-        // ensure it's not considered docked
-        dockMap.delete(draggedWindow);
+    if (snapTarget) dock(dragged, snapTarget);
+    else {
+        dockMap.delete(dragged);
         updateLayout();
     }
 
-    hideDockAreas();
-    draggedWindow = null;
+    showOverlays(false);
+    dragged = null;
     snapTarget = null;
 
-    document.removeEventListener('pointermove', onMove);
-    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener("pointermove", onDrag);
+    document.removeEventListener("pointerup", endDrag);
 }
 
-// On page load ensure layout reflects any existing docked windows
+/***********************************************************************
+ * Initialize
+ ***********************************************************************/
 updateLayout();
