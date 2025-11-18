@@ -195,8 +195,8 @@ html, body {
 .splitter.right {
     width: 6px;
     cursor: ew-resize;
-    top: 0;
-    bottom: 0;
+    top: var(--dock-top-height, 0px);
+    bottom: var(--dock-bottom-height, 0px);
 }
 
 /* Top/Bottom = horizontal splitter */
@@ -204,8 +204,8 @@ html, body {
 .splitter.bottom {
     height: 6px;
     cursor: ns-resize;
-    left: 0;
-    right: 0;
+    left: var(--dock-left-width, 0px);
+    right: var(--dock-right-width, 0px);
 }
 
 /* Position anchors */
