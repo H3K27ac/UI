@@ -101,15 +101,7 @@ function getTabs(area) {
 }
 
 function showDockAreas() {
-    const centerOccupied = dockAreas[4].querySelector('.dock-panel') ? true : false;
-    displayDockAreas.forEach(a => {
-        // Hide center if already occupied
-        if (centerOccupied && a.classList.contains('center')) {
-            a.style.display = 'none';
-        } else {
-            a.style.display = 'block';
-        }
-    });
+    displayDockAreas.forEach(a => a.style.display = 'block');
 }
 
 
@@ -176,27 +168,6 @@ function dockToArea(win, displayArea) {
     win.style.display = 'none';
     area.style.display = 'block';
 
-    // CENTER: only one window, no tabs
-    if (areaType === 'center') {
-        let content = area.querySelector('.dock-content');
-
-        if (!content) {
-            content = document.createElement('div');
-            content.className = 'dock-content';
-            area.appendChild(content);
-        }
-
-        content.innerHTML = '';
-
-        const panel = document.createElement('div');
-        panel.className = 'dock-panel active';
-        panel.appendChild(win.querySelector('.window-content').cloneNode(true));
-        content.appendChild(panel);
-
-        return;
-    }
-
-    // ----- Other regions: create or use tab system -----
     const tabs = getTabs(area);
     tabs.addTab(win);
 }
