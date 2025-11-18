@@ -195,8 +195,8 @@ html, body {
 .splitter.right {
     width: 6px;
     cursor: ew-resize;
-    top: var(--dock-top-height, 0px);
-    bottom: var(--dock-bottom-height, 0px);
+    top: 0;
+    bottom: 0;
 }
 
 /* Top/Bottom = horizontal splitter */
