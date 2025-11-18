@@ -105,7 +105,6 @@ html, body {
     align-items: center;
     height: 28px;
     background: black;
-    color: white;
     padding: 0 4px;
     gap: 4px;
 }
@@ -115,6 +114,7 @@ html, body {
     padding: 4px 10px;
     border: 1px solid white;
     background: black;
+    color: white;
     border-radius: 4px 4px 0 0;
     cursor: pointer;
     white-space: nowrap;
