@@ -63,7 +63,6 @@ html, body {
     color: white;
     border: 1px solid white;
     border-radius: 8px;
-    transition: top .2s ease, left .2s ease, width .2s ease, height .2s ease;
     display: flex;
     flex-direction: column; 
     z-index: 1;
@@ -73,7 +72,7 @@ html, body {
     padding: 10px;
     background: #007BFF;
     color: white;
-    border-radius: 8px 8px 0 0;
+    border-radius: 4px 4px 0 0;
     cursor: move;
     user-select: none;
     touch-action: none;
