@@ -62,7 +62,7 @@ html, body {
     background: black;
     color: white;
     border: 1px solid white;
-    border-radius: 8px;
+    border-radius: 4px;
     display: flex;
     flex-direction: column; 
     z-index: 1;
