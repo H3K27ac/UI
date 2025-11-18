@@ -1,0 +1,145 @@
+
+* {
+    box-sizing: border-box;
+}
+
+body, html {
+    font-family: 'Courier New', monospace;
+    font-size: 20px;
+    text-align: center;
+    align-items: center;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: black;
+    color: white;
+}
+
+.container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    background: black;
+    color: white;
+}
+
+
+.dockable-window {
+    width: 300px;
+    height: 300px;
+    margin: 0px;
+    background: black;
+    border: 1px solid white;
+    border-radius: 8px;
+    position: absolute;
+    transition: top .2s ease, left .2s ease, width .2s ease, height .2s ease;
+}
+
+.dockable-window header {
+    padding: 10px;
+    background: #007BFF;
+    color: white;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    touch-action: none;
+    user-select: none;
+    cursor: move;
+}
+
+.dockable-window .content {
+    padding: 20px;
+    height: calc(100% - 40px); /* To account for header height */
+    overflow-y: auto;
+}
+
+/* Docking areas */
+.display-dock-area {
+    position: absolute;
+    background: rgba(0,0,255,0.2);
+    border: 2px dashed blue;
+    display: none;
+}
+
+.display-dock-area.hovered {
+    border: 2px solid blue;
+}
+
+.dock-area {
+    position: absolute;
+    background: black;
+    color: white;
+    border: 1px solid white;
+    display: none
+}
+
+.dock-area.top { top: 0; left: 0; right: 0; height: 10%; }
+.dock-area.bottom { bottom: 0; left: 0; right: 0; height: 10%; }
+.dock-area.left { top: 0; bottom: 0; left: 0; width: 10%; }
+.dock-area.right { top: 0; bottom: 0; right: 0; width: 10%; }
+.dock-area.center { top: 20%; left: 20%; width: 60%; height: 60%; }
+
+.display-dock-area.top    { top: 10px;    left: 40%; width: 20%; height: 60px; }
+.display-dock-area.bottom { bottom: 10px; left: 40%; width: 20%; height: 60px; }
+.display-dock-area.left   { left: 10px;   top: 40%;  height: 20%; width: 60px; }
+.display-dock-area.right  { right: 10px;  top: 40%;  height: 20%; width: 60px; }
+.display-dock-area.center { top: 40%; left: 40%; width: 20%; height: 20%; }
+
+/* TAB BAR */
+.dock-tabs {
+    display: flex;
+    background: black;
+    height: 28px;
+    user-select: none;
+    align-items: center;
+    padding: 0 4px;
+    gap: 4px;
+}
+
+/* INDIVIDUAL TAB */
+.dock-tab {
+    background: black;
+    color: white;
+    border: 1px solid white;
+    padding: 4px 10px;
+    border-radius: 4px 4px 0 0;
+    cursor: pointer;
+}
+
+.dock-tab.active {
+    background: black;
+    color: white;
+    border: 1px solid red;
+    font-weight: bold;
+}
+
+/* CONTENT REGION */
+.dock-content {
+    position: absolute;
+    background: black;
+    color: white;
+    top: 28px;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    overflow: auto;
+}
+
+/* EACH PANEL */
+.dock-panel {
+    display: none;
+    height: 100%;
+    width: 100%;
+}
+
+.dock-panel.active {
+    display: block;
+}
+
+/* Mobile devices */
+@media (max-width: 768px) {
+    .dockable-window {
+        width: 100%;
+        height: auto;
+    }
+}
