@@ -14,6 +14,14 @@ let dragOffsetX = 0, dragOffsetY = 0;
 let snapTarget = null;
 let zIndexCounter = 1000;
 
+const savedLayout = {
+    left:   null,
+    right:  null,
+    top:    null,
+    bottom: null
+};
+
+
 // Maps and caches
 const dockMap = new Map();          // floating window element -> dock-area element where it's docked
 const originalSize = new Map();     // floating window -> {w,h}
@@ -270,10 +278,22 @@ function updateLayout() {
     const growW = 40;
     const growH = 30;
 
-    const leftW   = counts.left   ? Math.min(W * 0.4, baseW + (counts.left   - 1) * growW) : 0;
-    const rightW  = counts.right  ? Math.min(W * 0.4, baseW + (counts.right  - 1) * growW) : 0;
-    const topH    = counts.top    ? Math.min(H * 0.35, baseH + (counts.top   - 1) * growH) : 0;
-    const bottomH = counts.bottom ? Math.min(H * 0.35, baseH + (counts.bottom- 1) * growH) : 0;
+    const leftW   = counts.left
+    ? (savedLayout.left ?? Math.min(W * 0.4, baseW + (counts.left - 1) * growW))
+    : 0;
+
+   const rightW  = counts.right
+    ? (savedLayout.right ?? Math.min(W * 0.4, baseW + (counts.right - 1) * growW))
+    : 0;
+
+    const topH    = counts.top
+    ? (savedLayout.top ?? Math.min(H * 0.35, baseH + (counts.top - 1) * growH))
+    : 0;
+
+    const bottomH = counts.bottom
+    ? (savedLayout.bottom ?? Math.min(H * 0.35, baseH + (counts.bottom - 1) * growH))
+    : 0;
+
 
     // Set CSS variables used by the grid layout
     container.style.setProperty('--dock-left-width',   leftW   + 'px');
@@ -364,7 +384,16 @@ function doResize(e) {
 
 
 function endResize() {
+    if (activeSplitter) {
+        const s = activeSplitter;
+        const cs = getComputedStyle(container);
+        const size = parseFloat(cs.getPropertyValue(s.cssVar));
+
+        savedLayout[s.dir] = size;   // Save the resized value
+    }
     activeSplitter = null;
+
+    savedLayout[s.dir] = size;
     document.removeEventListener("pointermove", doResize);
     document.removeEventListener("pointerup", endResize);
 }
