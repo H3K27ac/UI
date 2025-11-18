@@ -162,10 +162,12 @@ html, body {
 }
 
 
-
+/*
 @media (max-width: 768px) {
     .dockable-window {
         width: 100%;
         height: auto;
     }
 }
+*/
+
