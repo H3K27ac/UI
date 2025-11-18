@@ -21,9 +21,21 @@ html, body {
     width: 100%;
     height: 100%;
     display: grid;
-    grid-template-columns: auto 1fr auto;
-    grid-template-rows: auto 1fr auto;
     overflow: hidden;
+    grid-template-columns:
+        var(--dock-left-width, 0px)
+        1fr
+        var(--dock-right-width, 0px);
+
+    grid-template-rows:
+        var(--dock-top-height, 0px)
+        1fr
+        var(--dock-bottom-height, 0px);
+
+    grid-template-areas:
+        "left  top     right"
+        "left  center  right"
+        "left  bottom  right";
 }
 
 /* =======================================
@@ -87,11 +99,11 @@ html, body {
 }
 
 /* Dock area positions */
-.dock-area.top    { grid-column: 1 / 4; grid-row: 1; }
-.dock-area.bottom { grid-column: 1 / 4; grid-row: 3; }
-.dock-area.left   { grid-column: 1;     grid-row: 1 / 4; }
-.dock-area.right  { grid-column: 3;     grid-row: 1 / 4; }
-.dock-area.center { grid-column: 2;     grid-row: 2; }
+.dock-area.left   { grid-area: left; }
+.dock-area.right  { grid-area: right; }
+.dock-area.top    { grid-area: top; }
+.dock-area.bottom { grid-area: bottom; }
+.dock-area.center { grid-area: center; display: block; }
 
 
 /* Display (preview) dock-area positions */

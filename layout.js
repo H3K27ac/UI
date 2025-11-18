@@ -229,31 +229,6 @@ function dockToArea(win, displayArea) {
         return;
     }
 
-    // Enforce "center should behave like single-primary pane" - fallback if center already occupied
-    if (areaType === 'center') {
-        const centerTabs = getTabs(area);
-        if (centerTabs.countTabs() >= 1) {
-            // fallback: if center already has a tab, dock to the nearest side instead
-            // find a side with least tabs: left, right, top, bottom
-            const sides = ['left','right','top','bottom'];
-            let targetSide = null, minTabs = Infinity;
-            sides.forEach(s => {
-                const a = dockAreas.find(x => x.classList.contains(s));
-                if (!a) return;
-                const t = getTabs(a);
-                const n = t.countTabs();
-                if (n < minTabs) { minTabs = n; targetSide = a; }
-            });
-            if (targetSide) {
-                console.warn('Center already occupied — docking to fallback side:', targetSide.className);
-                dockToArea(win, targetSide);
-                updateLayout(); // ensure layout updated
-                return;
-            }
-            // if no side found, fall through and put into center tabs (rare)
-        }
-    }
-
     // Normal docking:
     // 1) If currently docked elsewhere, undock (we handle moving content inside undock())
     undock(win, { revealOnly: true });
@@ -274,74 +249,40 @@ function dockToArea(win, displayArea) {
 }
 
 // Layout: adjust sizes of edge areas based on how many tabs they contain.
-// This gives a simple split-pane feel: left/right widths grow with content, top/bottom heights grow with content.
+// Left/right widths grow with content, top/bottom heights grow with content.
 // Center fills remainder.
 function updateLayout() {
     const containerRect = container.getBoundingClientRect();
-    const containerW = Math.max(200, containerRect.width);
-    const containerH = Math.max(200, containerRect.height);
+    const W = Math.max(200, containerRect.width);
+    const H = Math.max(200, containerRect.height);
 
-    // Count per area
     const counts = {};
     ['left','right','top','bottom','center'].forEach(k => {
-        const a = dockAreas.find(x => x.classList.contains(k));
-        if (!a) { counts[k] = 0; return; }
-        const t = dockTabsCache.has(a) ? dockTabsCache.get(a) : new DockTabs(a);
-        counts[k] = t.countTabs();
-        // hide empty areas
-        a.style.display = counts[k] === 0 ? 'none' : 'block';
+        const area = dockAreas.find(a => a.classList.contains(k));
+        if (!area) { counts[k] = 0; return; }
+        const tabs = getTabs(area);
+        counts[k] = tabs.countTabs();
+        area.style.display = counts[k] > 0 ? 'block' : (k === 'center' ? 'block' : 'none');
     });
 
-    // Determine sizes
     // Base sizes
-    const base = { left: 220, right: 220, top: 140, bottom: 140 };
-    // Increase per extra tab (so more tabs -> bigger pane)
-    const perTabIncrease = { left: 40, right: 40, top: 30, bottom: 30 };
+    const baseW = 220;
+    const baseH = 140;
+    const growW = 40;
+    const growH = 30;
 
-    // Compute desired sizes
-    let leftW = counts.left ? Math.min(containerW * 0.4, base.left + (counts.left - 1) * perTabIncrease.left) : 0;
-    let rightW = counts.right ? Math.min(containerW * 0.4, base.right + (counts.right - 1) * perTabIncrease.right) : 0;
-    let topH = counts.top ? Math.min(containerH * 0.35, base.top + (counts.top - 1) * perTabIncrease.top) : 0;
-    let bottomH = counts.bottom ? Math.min(containerH * 0.35, base.bottom + (counts.bottom - 1) * perTabIncrease.bottom) : 0;
+    const leftW   = counts.left   ? Math.min(W * 0.4, baseW + (counts.left   - 1) * growW) : 0;
+    const rightW  = counts.right  ? Math.min(W * 0.4, baseW + (counts.right  - 1) * growW) : 0;
+    const topH    = counts.top    ? Math.min(H * 0.35, baseH + (counts.top   - 1) * growH) : 0;
+    const bottomH = counts.bottom ? Math.min(H * 0.35, baseH + (counts.bottom- 1) * growH) : 0;
 
-    // Apply sizes via inline styles. 
-    container.style.setProperty('--dock-left-width', `${leftW}px`);
-    container.style.setProperty('--dock-right-width', `${rightW}px`);
-    container.style.setProperty('--dock-top-height', `${topH}px`);
-    container.style.setProperty('--dock-bottom-height', `${bottomH}px`);
-
-    // Also set explicit inline styles to be more robust:
-    const leftArea = dockAreas.find(a => a.classList.contains('left'));
-    const rightArea = dockAreas.find(a => a.classList.contains('right'));
-    const topArea = dockAreas.find(a => a.classList.contains('top'));
-    const bottomArea = dockAreas.find(a => a.classList.contains('bottom'));
-    const centerArea = dockAreas.find(a => a.classList.contains('center'));
-
-    if (leftArea) {
-        leftArea.style.display = counts.left ? 'block' : 'none';
-        leftArea.style.width = `${leftW}px`;
-        leftArea.style.flexBasis = `${leftW}px`;
-    }
-    if (rightArea) {
-        rightArea.style.display = counts.right ? 'block' : 'none';
-        rightArea.style.width = `${rightW}px`;
-        rightArea.style.flexBasis = `${rightW}px`;
-    }
-    if (topArea) {
-        topArea.style.display = counts.top ? 'block' : 'none';
-        topArea.style.height = `${topH}px`;
-        topArea.style.flexBasis = `${topH}px`;
-    }
-    if (bottomArea) {
-        bottomArea.style.display = counts.bottom ? 'block' : 'none';
-        bottomArea.style.height = `${bottomH}px`;
-        bottomArea.style.flexBasis = `${bottomH}px`;
-    }
-    if (centerArea) {
-        centerArea.style.display = counts.center ? 'block' : 'block'; // center always visible
-        // center should grow to fill remaining space - rely on CSS flex/grid to do so
-    }
+    // Set CSS variables used by the grid layout
+    container.style.setProperty('--dock-left-width',   leftW   + 'px');
+    container.style.setProperty('--dock-right-width',  rightW  + 'px');
+    container.style.setProperty('--dock-top-height',   topH    + 'px');
+    container.style.setProperty('--dock-bottom-height',bottomH + 'px');
 }
+
 
 // Dragging logic
 
