@@ -9,7 +9,7 @@ let dragOffsetY = 0;
 let snapTarget = null;
 let zIndexCounter = 10;
 
-// --- docking data ---
+// docking data
 const dockMap = new Map();   // window → area
 const originalSize = new Map();
 const dockTabsCache = new WeakMap(); // areaElement → DockTabs instance
