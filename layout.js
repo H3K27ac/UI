@@ -393,7 +393,6 @@ function endResize() {
     }
     activeSplitter = null;
 
-    savedLayout[s.dir] = size;
     document.removeEventListener("pointermove", doResize);
     document.removeEventListener("pointerup", endResize);
 }
