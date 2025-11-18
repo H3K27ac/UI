@@ -55,6 +55,20 @@ html, body {
     z-index: 1;
 }
 
+.container-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50px;
+    background: black;
+    color: white;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    z-index: 2000;
+}
+
 .dockable-window header {
     padding: 10px;
     background: #007BFF;
@@ -101,13 +115,11 @@ html, body {
 /* Dock area positions */
 .dock-area.left   { grid-area: left; }
 .dock-area.right  { grid-area: right; }
-.dock-area.top    { grid-area: top; }
 .dock-area.bottom { grid-area: bottom; }
 .dock-area.center { grid-area: center; display: block; }
 
 
 /* Display (preview) dock-area positions */
-.display-dock-area.top    { top: 10px;    left: 40%; width: 20%; height: 60px; }
 .display-dock-area.bottom { bottom: 10px; left: 40%; width: 20%; height: 60px; }
 .display-dock-area.left   { left: 10px;   top: 40%;  width: 60px; height: 20%; }
 .display-dock-area.right  { right: 10px;  top: 40%;  width: 60px; height: 20%; }
